@@ -17,11 +17,15 @@ public class Subscriber {
         this.method = method;
     }
 
-    private void invoke(final Object event){
+    public void invoke(final Object event) {
         try{
             this.method.invoke(this.target, event);
-        } catch (InvocationTargetException | IllegalAccessException e) {
-            e.printStackTrace();
+        } catch (IllegalArgumentException var1) {
+            throw new Error(this.method + " rejected argument: " + event.getClass());
+        } catch (IllegalAccessException var2) {
+            throw new Error(this.method + " was inaccessible");
+        } catch (InvocationTargetException var3) {
+            throw new Error(this.method + " invoke failed");
         }
     }
 

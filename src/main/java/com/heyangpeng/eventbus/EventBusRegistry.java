@@ -2,6 +2,7 @@ package com.heyangpeng.eventbus;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.util.ObjectUtils;
 
 import java.util.*;
 
@@ -21,7 +22,7 @@ public class EventBusRegistry {
 
         Class<?> listenerClass = listener.getClass();
         if(!Objects.isNull(listenerCache.get(listenerClass))){
-            logger.error(String.format("%s : has already been registered!",listenerClass));
+            logger.warn(String.format("%s : has already been registered!",listenerClass));
             return;
         }
 
@@ -39,9 +40,11 @@ public class EventBusRegistry {
         }
 
         Class<?> listenerClass = listener.getClass();
+        Boolean listenerExisted = listenerCache.get(listenerClass);
         
-        if(Objects.isNull(listenerCache.get(listenerClass))){
-            throw new IllegalArgumentException(String.format("Is %s registered?",listenerClass));
+        if(Objects.isNull(listenerExisted)) {
+            logger.warn(String.format("%s : was registered?",listenerClass));
+            return;
         }
 
         Map<Class<?>, List<Subscriber>> listenerMethods = EventBusFinder.findAllSubscribers(listener);
@@ -50,26 +53,22 @@ public class EventBusRegistry {
         List<Subscriber> currentSubscribers;    //事件类型对应的所有订阅者
         List<Subscriber> loseSubscribers;       //落选的订阅者
 
-        if(!listenerMethods.isEmpty()){
+        if(!ObjectUtils.isEmpty(listenerMethods)){
 
             for (Map.Entry<Class<?>, List<Subscriber>> entry : listenerMethods.entrySet()) {
                 eventType = entry.getKey();
                 loseSubscribers = entry.getValue();
-                currentSubscribers = this.subscribers.get(eventType);
+                currentSubscribers = getSubscribers(eventType);
 
-                if (!currentSubscribers.isEmpty() && !loseSubscribers.isEmpty()){
-                    for(Subscriber loser : loseSubscribers){
-                        Iterator<Subscriber> iterator = currentSubscribers.iterator();
+                for(Subscriber loser : loseSubscribers){
+                    Iterator<Subscriber> iterator = currentSubscribers.iterator();
 
-                        while(iterator.hasNext()){
-                            Subscriber current = iterator.next();
-                            if(current.getTarget().getClass() == loser.getTarget().getClass()){
-                                iterator.remove();
-                            }
+                    while(iterator.hasNext()){
+                        Subscriber current = iterator.next();
+                        if(current.getTarget().getClass() == loser.getTarget().getClass()){
+                            iterator.remove();
                         }
                     }
-                }else{
-                    throw new IllegalArgumentException(String.format("Is %s registered?",listenerClass));
                 }
             }
             listenerCache.remove(listenerClass);
@@ -77,8 +76,20 @@ public class EventBusRegistry {
         }
     }
 
-    public void dispatch(Object event){
+    public List<Subscriber> getSubscribers(Object object){
 
+        List<Subscriber> subscribersForType;
+        Class<?> eventType;
+
+        if(object instanceof Class){
+            eventType = (Class<?>) object;
+        }else {
+            eventType = object.getClass();
+        }
+
+        subscribersForType = this.subscribers.get(eventType);
+
+        return ObjectUtils.isEmpty(subscribersForType) ? null : subscribersForType;
     }
 
 }
