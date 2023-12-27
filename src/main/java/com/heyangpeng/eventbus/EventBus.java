@@ -11,7 +11,7 @@ public class EventBus {
     }
 
     public void unregister(Object subscriber){
-
+        this.registry.unregister(subscriber);
     }
 
     public void post(Object event){

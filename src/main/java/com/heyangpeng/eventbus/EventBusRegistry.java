@@ -11,7 +11,7 @@ public class EventBusRegistry {
 
     private final Map<Class<?>, List<Subscriber>> subscribers = new HashMap<>();
 
-    private final Map<Class<?>, Boolean> subscribeCache = new HashMap<>();
+    private final Map<Class<?>, Boolean> listenerCache = new HashMap<>();
 
     public void register(Object listener){
 
@@ -20,26 +20,65 @@ public class EventBusRegistry {
         }
 
         Class<?> listenerClass = listener.getClass();
-        if(!Objects.isNull(subscribeCache.get(listenerClass))){
+        if(!Objects.isNull(listenerCache.get(listenerClass))){
             logger.error(String.format("%s : has already been registered!",listenerClass));
             return;
         }
 
         Map<Class<?>, List<Subscriber>> candidates = EventBusFinder.findAllSubscribers(listener);
         if(!candidates.isEmpty()){
-            subscribeCache.put(listenerClass, true);
+            listenerCache.put(listenerClass, true);
             logger.info(String.format("%s : register successfully!",listenerClass));
             candidates.forEach((eventType,subs) -> subscribers.computeIfAbsent(eventType,t -> new ArrayList<>()).addAll(subs));
         }
     }
 
-    public void unregister(Object subscriber){
+    public void unregister(Object listener){
+        if(Objects.isNull(listener)){
+            throw new NullPointerException();
+        }
 
+        Class<?> listenerClass = listener.getClass();
+        
+        if(Objects.isNull(listenerCache.get(listenerClass))){
+            throw new IllegalArgumentException(String.format("Is %s registered?",listenerClass));
+        }
+
+        Map<Class<?>, List<Subscriber>> listenerMethods = EventBusFinder.findAllSubscribers(listener);
+
+        Class<?> eventType;                     //事件类型
+        List<Subscriber> currentSubscribers;    //事件类型对应的所有订阅者
+        List<Subscriber> loseSubscribers;       //落选的订阅者
+
+        if(!listenerMethods.isEmpty()){
+
+            for (Map.Entry<Class<?>, List<Subscriber>> entry : listenerMethods.entrySet()) {
+                eventType = entry.getKey();
+                loseSubscribers = entry.getValue();
+                currentSubscribers = this.subscribers.get(eventType);
+
+                if (!currentSubscribers.isEmpty() && !loseSubscribers.isEmpty()){
+                    for(Subscriber loser : loseSubscribers){
+                        Iterator<Subscriber> iterator = currentSubscribers.iterator();
+
+                        while(iterator.hasNext()){
+                            Subscriber current = iterator.next();
+                            if(current.getTarget().getClass() == loser.getTarget().getClass()){
+                                iterator.remove();
+                            }
+                        }
+                    }
+                }else{
+                    throw new IllegalArgumentException(String.format("Is %s registered?",listenerClass));
+                }
+            }
+            listenerCache.remove(listenerClass);
+            logger.info(String.format("%s : unregistered!",listenerClass));
+        }
     }
 
     public void dispatch(Object event){
 
     }
-
 
 }
