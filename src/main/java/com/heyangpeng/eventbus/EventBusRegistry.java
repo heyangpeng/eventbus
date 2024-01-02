@@ -5,80 +5,102 @@ import org.slf4j.LoggerFactory;
 import org.springframework.util.ObjectUtils;
 
 import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
+import java.util.concurrent.CopyOnWriteArrayList;
 
 public class EventBusRegistry {
 
-    public static final Logger logger = LoggerFactory.getLogger(EventBusRegistry.class);
+    private static final Logger logger = LoggerFactory.getLogger(EventBusRegistry.class);
 
-    private final Map<Class<?>, List<Subscriber>> subscribers = new HashMap<>();
+    private static final Object lock = new Object();
 
-    private final Map<Class<?>, Boolean> listenerCache = new HashMap<>();
+    private final ConcurrentMap<Class<?>, CopyOnWriteArrayList<Subscriber>> subscribers = new ConcurrentHashMap<>();
+
+    private final ConcurrentMap<Class<?>, Boolean> listenerCache = new ConcurrentHashMap<>();
 
     public void register(Object listener){
 
-        if(Objects.isNull(listener)){
-            throw new NullPointerException();
-        }
-
+        Objects.requireNonNull(listener);
         Class<?> listenerClass = listener.getClass();
-        if(!Objects.isNull(listenerCache.get(listenerClass))){
+
+        if(checkListenerCached(listenerClass)) {
             logger.warn(String.format("%s : has already been registered!",listenerClass));
             return;
         }
 
-        Map<Class<?>, List<Subscriber>> candidates = EventBusFinder.findAllSubscribers(listener);
-        if(!candidates.isEmpty()){
-            listenerCache.put(listenerClass, true);
-            logger.info(String.format("%s : register successfully!",listenerClass));
-            candidates.forEach((eventType,subs) -> subscribers.computeIfAbsent(eventType,t -> new ArrayList<>()).addAll(subs));
+        synchronized (lock) {
+
+            if(!checkListenerCached(listenerClass)) {
+                Map<Class<?>, List<Subscriber>> candidates = EventBusFinder.findAllSubscribers(listener);
+
+                if(!candidates.isEmpty()){
+                    candidates.forEach((eventType,subs) -> subscribers.computeIfAbsent(eventType,t -> new CopyOnWriteArrayList<>()).addAll(subs));
+                    listenerCache.putIfAbsent(listenerClass, Boolean.TRUE);
+                    logger.info(String.format("%s : register successfully!",listenerClass));
+                }
+            }else {
+                logger.warn(String.format("%s : has already been registered!",listenerClass));
+            }
         }
     }
 
     public void unregister(Object listener){
-        if(Objects.isNull(listener)){
-            throw new NullPointerException();
-        }
 
+        Objects.requireNonNull(listener);
         Class<?> listenerClass = listener.getClass();
-        Boolean listenerExisted = listenerCache.get(listenerClass);
-        
-        if(Objects.isNull(listenerExisted)) {
+
+        if(!checkListenerCached(listenerClass)) {
             logger.warn(String.format("%s : was registered?",listenerClass));
             return;
         }
 
-        Map<Class<?>, List<Subscriber>> listenerMethods = EventBusFinder.findAllSubscribers(listener);
+        Class<?> eventType;                                     //事件类型
+        CopyOnWriteArrayList<Subscriber> currentSubscribers;    //事件类型对应的所有订阅者
+        List<Subscriber> loseSubscribers;                       //落选的订阅者
 
-        Class<?> eventType;                     //事件类型
-        List<Subscriber> currentSubscribers;    //事件类型对应的所有订阅者
-        List<Subscriber> loseSubscribers;       //落选的订阅者
+        synchronized (lock) {
 
-        if(!ObjectUtils.isEmpty(listenerMethods)){
+            if (checkListenerCached(listenerClass)) {
 
-            for (Map.Entry<Class<?>, List<Subscriber>> entry : listenerMethods.entrySet()) {
-                eventType = entry.getKey();
-                loseSubscribers = entry.getValue();
-                currentSubscribers = getSubscribers(eventType);
+                Map<Class<?>, List<Subscriber>> listenerMethods = EventBusFinder.findAllSubscribers(listener);
 
-                for(Subscriber loser : loseSubscribers){
-                    Iterator<Subscriber> iterator = currentSubscribers.iterator();
+                for (Map.Entry<Class<?>, List<Subscriber>> entry : listenerMethods.entrySet()) {
 
-                    while(iterator.hasNext()){
-                        Subscriber current = iterator.next();
-                        if(current.getTarget().getClass() == loser.getTarget().getClass()){
-                            iterator.remove();
-                        }
+                    eventType = entry.getKey();
+                    loseSubscribers = entry.getValue();
+                    currentSubscribers = getSubscribers(eventType);
+
+                    for(Subscriber loser : loseSubscribers){
+                        currentSubscribers.removeIf(current -> current.getTarget().getClass() == loser.getTarget().getClass());
                     }
                 }
+
+                listenerCache.remove(listenerClass);
+                logger.info(String.format("%s : unregistered!",listenerClass));
+            }else {
+                logger.warn(String.format("%s : was registered?",listenerClass));
             }
-            listenerCache.remove(listenerClass);
-            logger.info(String.format("%s : unregistered!",listenerClass));
         }
     }
 
-    public List<Subscriber> getSubscribers(Object object){
+    /**
+     * 检查订阅者是否已注册
+     * @param listenerClass 监听类
+     * @return true-已注册,false-未注册
+     */
+    private boolean checkListenerCached(Class<?> listenerClass) {
+        Boolean cache = listenerCache.get(listenerClass);
+        return cache != null && cache.equals(Boolean.TRUE);
+    }
 
-        List<Subscriber> subscribersForType;
+    /**
+     * 从缓存获取事件对应的订阅者列表
+     * @param object 事件类型
+     */
+    public CopyOnWriteArrayList<Subscriber> getSubscribers(Object object){
+
+        CopyOnWriteArrayList<Subscriber> subscribersForType;
         Class<?> eventType;
 
         if(object instanceof Class){
