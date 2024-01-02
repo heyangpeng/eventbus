@@ -17,10 +17,11 @@ public class EventBusFinder {
         Method[] methods = listener.getClass().getDeclaredMethods();
 
         for (Method method : methods) {
-            if (method.isAnnotationPresent(Subscribe.class)) {
+            Subscribe annotation = method.getAnnotation(Subscribe.class);
+            if (annotation != null) {
                 checkParameterAllowed(method);
                 Class<?> parameterType = method.getParameterTypes()[0];
-                annotatedMethods.computeIfAbsent(parameterType, k -> new ArrayList<>()).add(Subscriber.create(listener, method));
+                annotatedMethods.computeIfAbsent(parameterType, k -> new ArrayList<>()).add(Subscriber.create(listener, method, annotation.threadType()));
             }
         }
 

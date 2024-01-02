@@ -1,5 +1,7 @@
 package com.heyangpeng.eventbus;
 
+import com.heyangpeng.eventbus.common.ThreadType;
+
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 
@@ -7,14 +9,16 @@ public class Subscriber {
 
     private final Object target;
     private final Method method;
+    private final ThreadType threadType;
 
-    static Subscriber create(Object listener,Method method){
-        return new Subscriber(listener, method);
+    static Subscriber create(Object listener, Method method, ThreadType threadType){
+        return new Subscriber(listener, method, threadType);
     }
 
-    private Subscriber(Object listener,Method method){
+    private Subscriber(Object listener, Method method, ThreadType threadType){
         this.target = listener;
         this.method = method;
+        this.threadType = threadType;
     }
 
     public void invoke(final Object event) {
@@ -35,5 +39,9 @@ public class Subscriber {
 
     public Object getTarget() {
         return this.target;
+    }
+
+    public ThreadType getThreadType() {
+        return this.threadType;
     }
 }
