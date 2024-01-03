@@ -21,13 +21,14 @@ public void receive(String message){
 2. 注册并发布事件：提供`EventBus`和`AsyncEventBus`两种事件总线的实现，`EventBus`提供灵活的处理方式，`AsyncEventBus`中所有事件都是异步处理的。
 ```java
 public static void main(String[] args){
+    EventBus eventbus = EventBus.getInstance();
     // 注册
-    EventBus.getInstance().register(this);
+    eventbus.register(this);
     // 发布
-    EventBus.post("anything");
+    eventbus.post("anything");
     // 注销
-    EventBus.getInstance().unregister(this);
-    }
+    eventbus.unregister(this);
+}
 ```
 `AsyncEventBus`同上。
 
