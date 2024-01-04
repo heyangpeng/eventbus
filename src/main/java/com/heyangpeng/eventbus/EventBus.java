@@ -12,27 +12,29 @@ public class EventBus {
 
     private static final EventBus instance = new EventBus();
 
-    private final EventBusRegistry registry = new EventBusRegistry();
+    private static final EventBusRegistry registry = new EventBusRegistry();
 
-    private final int CORE_POOL_SIZE = Runtime.getRuntime().availableProcessors() * 2;
+    private static final ThreadFactory factory = new EventBusThreadFactory(1);
 
-    private final int MAX_POOL_SIZE = CORE_POOL_SIZE * 2;
+    private static final int CORE_POOL_SIZE = Runtime.getRuntime().availableProcessors() * 2;
 
-    private final Executor executor = new ThreadPoolExecutor(
+    private static final int MAX_POOL_SIZE = CORE_POOL_SIZE * 2;
+
+    private static final Executor executor = new ThreadPoolExecutor(
             CORE_POOL_SIZE,
             MAX_POOL_SIZE,
             3L,
             TimeUnit.SECONDS,
             new LinkedBlockingQueue<>(),
-            Executors.defaultThreadFactory()
+            factory
     );
 
     public void register(Object subscriber){
-        this.registry.register(subscriber);
+        registry.register(subscriber);
     }
 
     public void unregister(Object subscriber){
-        this.registry.unregister(subscriber);
+        registry.unregister(subscriber);
     }
 
     public void post(Object event){
@@ -45,7 +47,7 @@ public class EventBus {
 
         subscribersForType.forEach(subscriber -> {
             if(subscriber.getThreadType() == ThreadType.ASYNC) {
-                this.executor.execute(() -> subscriber.invoke(event));
+                executor.execute(() -> subscriber.invoke(event));
             }else {
                 subscriber.invoke(event);
             }
@@ -62,7 +64,7 @@ public class EventBus {
             return Collections.emptyList();
         }
 
-        List<Subscriber> subscribersForType = this.registry.getSubscribers(event);
+        List<Subscriber> subscribersForType = registry.getSubscribers(event);
         if (ObjectUtils.isEmpty(subscribersForType)) {
             return Collections.emptyList();
         }
@@ -75,11 +77,11 @@ public class EventBus {
     }
 
     final EventBusRegistry getRegistry() {
-        return this.registry;
+        return registry;
     }
 
     final Executor getExecutor() {
-        return this.executor;
+        return executor;
     }
 
 }
